@@ -16,9 +16,7 @@ class HumbleResourcePool
   end
 
   def num_available
-    @mutex.synchronize do
-      @available.count
-    end
+    @available.count
   end
 
   def register_shutdown_proc(&block)
@@ -40,6 +38,7 @@ class HumbleResourcePool
         raise NoResourcesAvailableError
       end
 
+      # pop a resource off the @available stack and add it to @in_use
       resource = @available.pop
       @in_use << resource
       resource
@@ -48,7 +47,11 @@ class HumbleResourcePool
 
   def check_in(resource)
     @mutex.synchronize do
+      # remove the resource from the @in_use array and add it back to @available
       resource = @in_use.select {|r| r === resource}.first
+
+      # if we can't find the passed-in resource, something weird happened. Perhaps
+      # the caller returned the wrong object?
       if !resource.nil?
         @in_use -= [resource]
         @available << resource
@@ -60,6 +63,9 @@ class HumbleResourcePool
     if @shutdown_proc
       @mutex.synchronize do
         @available.each {|r| @shutdown_proc.call(r)}
+        # This humble resource pool hopes the caller won't shut things down
+        # until they've checked in all resources, but if they don't we'll shut 
+        # them down just the same. 
         @in_use.each {|r| @shutdown_proc.call(r)}
       end
     end
